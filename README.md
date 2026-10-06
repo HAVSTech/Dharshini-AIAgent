@@ -1,51 +1,82 @@
 # Dharshini AI Agent
 
-Dharshini is a Windows-first personal AI agent: voice in, Gemini reasoning and tool use, actions on the local PC, voice out.
+Dharshini is a Windows-first personal AI assistant: microphone audio goes to Gemini Live, Gemini can request explicitly registered local tools, the local app executes approved actions, and Gemini speaks the result.
 
-## Current system
-- Gemini Live bidirectional audio
-- 16 kHz microphone input / 24 kHz speaker output
+## End-to-end flow
+
+Microphone -> Gemini Live -> Function call -> Local tool -> Function response -> Gemini -> Speaker
+
+Gemini Live is a WebSocket-based, bidirectional API. The current implementation follows Google's documented 16-bit PCM/16 kHz input and native audio output flow, with manual client-side handling of function calls.
+
+## Included now
+
+- Gemini 3.8 Live voice session
+- 16 kHz mono microphone streaming and 24 kHz speaker playback
 - Input and output transcription
-- Local SQLite memory and action audit log
-- Controlled Windows tool architecture
-- Safety classifications and confirmation gates
-- Local wake-word adapter with push-to-talk fallback
+- Function calling into a local, allow-listed Windows tool registry
+- Open Notepad, Calculator, Paint, Explorer or VS Code
+- Open HTTP/HTTPS URLs
+- Open an existing folder
+- Read CPU/RAM status
+- Desktop screenshot with confirmation
+- SQLite memory and action audit log
+- Risk confirmation for non-SAFE tools
+- Text-mode Gemini test
+- Local doctor command and automated core tests
 
-## Setup
+## Safety boundary
+
+Dharshini does not expose arbitrary shell execution. Windows application launching is allow-listed, URLs are restricted to HTTP/HTTPS, and screenshot capture requires confirmation by default.
+
+The model does not directly control Windows. It asks the local application to execute a registered function; the application returns the result to Gemini.
+
+## Setup on Windows
 
 ```powershell
 git clone https://github.com/HAVSTech/Dharshini-AIAgent.git
 cd Dharshini-AIAgent
 py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\\.venv\\Scripts\\Activate.ps1
 pip install -r requirements.txt
-python -m playwright install chromium
 Copy-Item .env.example .env
 notepad .env
 ```
 
-Add your Gemini API key, then:
+Put your Gemini API key in .env.
+
+Run the local check:
 
 ```powershell
-python -m dharshini.main --text "say hello"
+python -m dharshini.main --doctor
+```
+
+Test text mode:
+
+```powershell
+python -m dharshini.main --text "Introduce yourself"
+```
+
+Start voice mode:
+
+```powershell
 python -m dharshini.main --voice
 ```
 
-## Voice design
+Voice input is sent as raw 16-bit PCM at 16 kHz in 100 ms blocks, matching the Live API audio format.
 
-The agent uses Gemini Live for real-time audio and function calling. Google documents raw 16-bit PCM at 16 kHz for input and 24 kHz audio output. Live tool calls must be executed by the client and returned with function responses.
+## Current activation model
 
-The default activation mode is push-to-talk. A custom local “Dharshini” wake-word model can be plugged into the wake layer later; the included openWakeWord package is local and does not require an API key, but its stock models do not contain a custom Dharshini phrase.
+The current voice mode is always-listening while the process is running. A custom spoken "Dharshini" wake-word model and a Windows tray/hotkey shell are not claimed as complete because they require a local Windows audio/input test and, for a true custom wake phrase, a trained wake-word model.
 
-## Safety
+## Verification
 
-Dharshini does not expose unrestricted shell execution. Tools are explicitly registered and marked SAFE, CONFIRM, or BLOCKED. File writes, printing, screenshots, clipboard writes, and screen interaction require confirmation by default.
+The repository contains tests/test_core.py for memory, safety, and tool-registry checks. GitHub Actions can run those checks automatically. The final microphone, speaker, Windows application launch, and Gemini API path still need to be exercised on the target Windows machine because this development environment cannot access the user's audio devices.
 
-## Planned hardening
+## Roadmap after first successful run
 
-- Custom Dharshini wake model
-- Windows tray/startup application
-- Screen vision loop
-- Better printer-specific orientation/paper detection
-- Optional local/offline LLM backend
-- Plugin/MCP bridge
+- True "Dharshini" custom wake word
+- Windows tray application and startup
+- Screen vision on demand
+- Printer-specific workflow for the Brother HL-L2400D
+- More narrowly scoped Windows controls
+- Session reconnect/extension handling for long-running assistant sessions
