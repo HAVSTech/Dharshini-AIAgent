@@ -42,6 +42,11 @@ def main():
         )
         return
 
+    if args.tray:
+        from dharshini.tray import run_tray
+        run_tray()
+        return
+
     settings = get_settings()
     memory = MemoryStore(os.getenv("DHARSHINI_MEMORY_DB", "data/dharshini.db"))
     safety = SafetyManager(
@@ -54,15 +59,9 @@ def main():
             print(asyncio.run(agent.text(args.text)))
         elif args.voice:
             asyncio.run(agent.voice())
-        elif args.tray:
-            from dharshini.tray import run_tray
-
-            run_tray(agent)
         else:
             print(f"{settings.name} is installed.")
-            print(
-                'Use --doctor, --text "hello", --voice, or --tray.'
-            )
+            print('Use --doctor, --text "hello", --voice, or --tray.')
     finally:
         memory.close()
 
