@@ -1,47 +1,51 @@
 # Dharshini AI Agent
 
-Dharshini is a Windows-first voice AI agent designed to act like a personal computer assistant.
+Dharshini is a Windows-first personal AI agent: voice in, Gemini reasoning and tool use, actions on the local PC, voice out.
 
-## Current architecture
-- Voice/AI: Google Gemini Live API
-- Runtime: Python 3.11+
-- Windows control: controlled local tools
-- Safety: destructive/system-changing tools require confirmation
-- Configuration: .env
-
-## V1 capabilities
-- Gemini connection foundation
-- Controlled Windows application launching
-- Folder and URL opening
-- Basic system information
-- Desktop screenshot tool
-- Explicit tool allow-list and risk classification
+## Current system
+- Gemini Live bidirectional audio
+- 16 kHz microphone input / 24 kHz speaker output
+- Input and output transcription
+- Local SQLite memory and action audit log
+- Controlled Windows tool architecture
+- Safety classifications and confirmation gates
+- Local wake-word adapter with push-to-talk fallback
 
 ## Setup
-1. Install Python 3.11+.
-2. Clone this repository.
-3. Run:
-   ```powershell
-   py -3.11 -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   Copy-Item .env.example .env
-   ```
-4. Add your Gemini API key to .env.
-5. Run:
-   ```powershell
-   python -m dharshini.main
-   ```
+
+```powershell
+git clone https://github.com/HAVSTech/Dharshini-AIAgent.git
+cd Dharshini-AIAgent
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m playwright install chromium
+Copy-Item .env.example .env
+notepad .env
+```
+
+Add your Gemini API key, then:
+
+```powershell
+python -m dharshini.main --text "say hello"
+python -m dharshini.main --voice
+```
+
+## Voice design
+
+The agent uses Gemini Live for real-time audio and function calling. Google documents raw 16-bit PCM at 16 kHz for input and 24 kHz audio output. Live tool calls must be executed by the client and returned with function responses.
+
+The default activation mode is push-to-talk. A custom local “Dharshini” wake-word model can be plugged into the wake layer later; the included openWakeWord package is local and does not require an API key, but its stock models do not contain a custom Dharshini phrase.
 
 ## Safety
-Dharshini does not expose arbitrary PowerShell/CMD execution to the model. Tools are allow-listed and classified SAFE, CONFIRM, or BLOCKED.
 
-## Planned milestones
-1. Gemini Live voice transport
-2. Wake word: Dharshini
-3. Browser automation with Playwright
-4. Screen vision and mouse/keyboard control
-5. Printing automation
-6. Git/GitHub developer tools
-7. Windows tray app and startup
-8. Long-term memory
+Dharshini does not expose unrestricted shell execution. Tools are explicitly registered and marked SAFE, CONFIRM, or BLOCKED. File writes, printing, screenshots, clipboard writes, and screen interaction require confirmation by default.
+
+## Planned hardening
+
+- Custom Dharshini wake model
+- Windows tray/startup application
+- Screen vision loop
+- Better printer-specific orientation/paper detection
+- Optional local/offline LLM backend
+- Plugin/MCP bridge
