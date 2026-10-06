@@ -1,6 +1,6 @@
 [project]
 name = "dharshini-ai-agent"
-version = "0.3.0"
+version = "0.4.0"
 description = "Dharshini - a Windows voice AI agent"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,6 +12,8 @@ dependencies = [
   "numpy>=2.0.0",
   "pypdf>=6.0.0",
   "pywin32>=311",
+  "pystray>=0.19.5",
+  "openwakeword>=0.6.0",
   "pytest>=8.0.0",
 ]
 
