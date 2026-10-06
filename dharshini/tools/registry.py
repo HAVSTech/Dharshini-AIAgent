@@ -10,27 +10,24 @@ class ToolSpec:
     handler: Callable[..., str]
     risk: str = "SAFE"
 
-TOOLS = {
-    "open_app": ToolSpec("open_app", "Open an allow-listed Windows application.", open_app, "SAFE"),
-    "open_url": ToolSpec("open_url", "Open an HTTP or HTTPS URL in the default browser.", open_url, "SAFE"),
-    "open_folder": ToolSpec("open_folder", "Open an existing Windows folder.", open_folder, "SAFE"),
-    "system_info": ToolSpec("system_info", "Get current CPU and memory usage.", system_info, "SAFE"),
-    "take_screenshot": ToolSpec("take_screenshot", "Take a screenshot of the desktop.", take_screenshot, "CONFIRM"),
+TOOLS: dict[str, ToolSpec] = {
+    "open_app": ToolSpec("open_app", "Open an allow-listed Windows application.", open_app),
+    "open_url": ToolSpec("open_url", "Open an HTTP or HTTPS URL in the default browser.", open_url),
+    "open_folder": ToolSpec("open_folder", "Open an existing local folder.", open_folder),
+    "system_info": ToolSpec("system_info", "Report current CPU and memory usage.", system_info),
+    "take_screenshot": ToolSpec("take_screenshot", "Capture the desktop to a local PNG file.", take_screenshot, "CONFIRM"),
 }
-
+SCHEMAS: dict[str, dict[str, Any]] = {
+    "open_app": {"app": {"type": "STRING", "description": "Allow-listed application name."}},
+    "open_url": {"url": {"type": "STRING", "description": "HTTP or HTTPS URL."}},
+    "open_folder": {"path": {"type": "STRING", "description": "Existing local folder path."}},
+    "system_info": {},
+    "take_screenshot": {"path": {"type": "STRING", "description": "Optional output PNG path."}},
+}
+def declarations() -> list[dict[str, Any]]:
+    return [{"name": s.name, "description": s.description,
+             "parameters": {"type": "OBJECT", "properties": SCHEMAS[s.name],
+                           "required": list(SCHEMAS[s.name])}}
+            for s in TOOLS.values()]
 def as_gemini_tools() -> list[dict[str, Any]]:
-    declarations = []
-    for spec in TOOLS.values():
-        declarations.append({
-            "name": spec.name,
-            "description": spec.description,
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "app": {"type": "STRING", "description": "Application name for open_app."},
-                    "url": {"type": "STRING", "description": "HTTP/HTTPS URL for open_url."},
-                    "path": {"type": "STRING", "description": "Local path for open_folder or screenshot."},
-                },
-            },
-        })
-    return declarations
+    return declarations()
