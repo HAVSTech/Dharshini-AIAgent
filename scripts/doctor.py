@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 import os
 import platform
-import shutil
 
 
 def main() -> int:
@@ -24,6 +23,8 @@ def main() -> int:
         "pypdf",
         "win32print",
         "win32com.client",
+        "pystray",
+        "openwakeword",
     ):
         try:
             importlib.import_module(name)
@@ -31,6 +32,18 @@ def main() -> int:
         except Exception as exc:
             print("FAIL " + name + ": " + str(exc))
             failed = True
+
+    wake_path = os.getenv(
+        "DHARSHINI_WAKE_MODEL_PATH", "models/dharshini.tflite"
+    ).strip()
+    if os.path.isfile(wake_path):
+        print("OK  Wake-word model:", wake_path)
+    else:
+        print(
+            "WARN Wake-word model not found:",
+            wake_path,
+            "-> voice mode will fall back to always-listening.",
+        )
 
     sumatra = os.getenv("DHARSHINI_SUMATRA_PATH", "").strip()
     if sumatra and os.path.isfile(sumatra):
@@ -51,6 +64,7 @@ def main() -> int:
 
     try:
         import win32print
+
         printer = win32print.GetDefaultPrinter()
         print("OK  Default printer:", printer)
         if not printer:
