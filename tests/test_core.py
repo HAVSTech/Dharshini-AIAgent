@@ -2,7 +2,7 @@ from pathlib import Path
 
 from dharshini.memory import MemoryStore
 from dharshini.safety import SafetyManager
-from dharshini.tools.printer import SUPPORTED_EXTENSIONS
+from dharshini.tools.printer import STANDARD_PAPERS_MM, SUPPORTED_EXTENSIONS
 from dharshini.tools.registry import TOOLS, declarations
 
 
@@ -30,6 +30,7 @@ def test_registry():
         "system_info",
         "take_screenshot",
         "printer_status",
+        "printer_capabilities",
         "list_printers",
         "default_printer",
         "print_file",
@@ -41,3 +42,8 @@ def test_registry():
 
 def test_printer_file_types():
     assert {".pdf", ".doc", ".docx", ".xls", ".xlsx"} == SUPPORTED_EXTENSIONS
+
+
+def test_standard_paper_sizes():
+    assert STANDARD_PAPERS_MM["a4"] == (210, 297)
+    assert STANDARD_PAPERS_MM["letter"] == (216, 279)
