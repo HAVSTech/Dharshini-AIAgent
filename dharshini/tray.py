@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-import asyncio
-import threading
+import subprocess
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 import pystray
 
-from dharshini.agent.live import DharshiniAgent
 from dharshini.startup import install_startup, uninstall_startup, startup_enabled
 
 
 class DharshiniTray:
-    def __init__(self, agent: DharshiniAgent):
-        self.agent = agent
-        self.voice_thread: threading.Thread | None = None
-        self.stop_requested = threading.Event()
+    def __init__(self):
+        self.voice_process: subprocess.Popen | None = None
         self.icon = pystray.Icon(
             "dharshini",
             self._make_icon(),
@@ -44,29 +41,22 @@ class DharshiniTray:
         )
 
     def _start_voice(self, icon, item):
-        if self.voice_thread and self.voice_thread.is_alive():
+        if self.voice_process and self.voice_process.poll() is None:
             return
 
-        self.stop_requested.clear()
-
-        def run():
-            try:
-                asyncio.run(self.agent.voice())
-            except Exception as exc:
-                print(f"[Dharshini tray] Voice stopped: {exc}", flush=True)
-
-        self.voice_thread = threading.Thread(
-            target=run,
-            name="dharshini-voice",
-            daemon=True,
+        self.voice_process = subprocess.Popen(
+            [sys.executable, "-m", "dharshini.main", "--voice"],
+            cwd=str(Path.cwd()),
         )
-        self.voice_thread.start()
 
     def _stop_voice(self, icon, item):
-        self.stop_requested.set()
-        # The voice session is designed to be stopped by Ctrl+C/process exit
-        # today; this menu item provides a safe state transition for the tray.
-        print("[Dharshini tray] Stop requested.", flush=True)
+        if self.voice_process and self.voice_process.poll() is None:
+            self.voice_process.terminate()
+            try:
+                self.voice_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.voice_process.kill()
+        self.voice_process = None
 
     def _toggle_startup(self, icon, item):
         if startup_enabled():
@@ -75,12 +65,12 @@ class DharshiniTray:
             install_startup()
 
     def _exit(self, icon, item):
-        self.stop_requested.set()
+        self._stop_voice(icon, item)
         icon.stop()
 
     def run(self):
         self.icon.run()
 
 
-def run_tray(agent: DharshiniAgent):
-    DharshiniTray(agent).run()
+def run_tray():
+    DharshiniTray().run()
