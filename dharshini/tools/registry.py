@@ -25,7 +25,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     "take_screenshot": {"path": {"type": "STRING", "description": "Optional output PNG path."}},
 }
 def declarations() -> list[dict[str, Any]]:
-    return [{"name": s.name, "description": s.description,
+    return [{"name": s.name, "description": s.description, "behavior": "BLOCKING",
              "parameters": {"type": "OBJECT", "properties": SCHEMAS[s.name],
                            "required": list(SCHEMAS[s.name])}}
             for s in TOOLS.values()]
