@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import os
 from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,20 +14,31 @@ LEGACY_LIVE_MODELS = {
     "gemini-3.1-flash-live-preview",
 }
 
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str
     live_model: str
     name: str
     system_prompt: str
+    wake_word_enabled: bool
+    wake_model_path: str
+    wake_threshold: float
+
 
 def get_settings():
-    key=os.getenv("GEMINI_API_KEY","").strip()
+    key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
-        raise RuntimeError("GEMINI_API_KEY is missing. Copy .env.example to .env and add your key.")
+        raise RuntimeError(
+            "GEMINI_API_KEY is missing. Copy .env.example to .env and add your key."
+        )
 
-    configured=os.getenv("GEMINI_LIVE_MODEL","").strip()
-    live_model=CURRENT_LIVE_MODEL if not configured or configured in LEGACY_LIVE_MODELS else configured
+    configured = os.getenv("GEMINI_LIVE_MODEL", "").strip()
+    live_model = (
+        CURRENT_LIVE_MODEL
+        if not configured or configured in LEGACY_LIVE_MODELS
+        else configured
+    )
 
     if configured in LEGACY_LIVE_MODELS:
         print(
@@ -37,9 +50,20 @@ def get_settings():
     return Settings(
         api_key=key,
         live_model=live_model,
-        name=os.getenv("DHARSHINI_NAME","Dharshini").strip() or "Dharshini",
+        name=os.getenv("DHARSHINI_NAME", "Dharshini").strip() or "Dharshini",
         system_prompt=os.getenv(
             "DHARSHINI_SYSTEM_PROMPT",
             "You are Dharshini, a capable Windows desktop AI assistant.",
         ).strip(),
+        wake_word_enabled=os.getenv(
+            "DHARSHINI_WAKE_WORD_ENABLED", "true"
+        ).lower()
+        == "true",
+        wake_model_path=os.getenv(
+            "DHARSHINI_WAKE_MODEL_PATH",
+            "models/dharshini.tflite",
+        ).strip(),
+        wake_threshold=float(
+            os.getenv("DHARSHINI_WAKE_THRESHOLD", "0.5")
+        ),
     )
