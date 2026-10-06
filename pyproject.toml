@@ -1,0 +1,18 @@
+[project]
+name = "dharshini-ai-agent"
+version = "0.1.0"
+description = "Dharshini - a Windows voice AI agent"
+requires-python = ">=3.11"
+dependencies = [
+  "google-genai>=1.0.0",
+  "python-dotenv>=1.0.0",
+  "psutil>=6.0.0",
+  "Pillow>=11.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["dharshini*"]
