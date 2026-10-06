@@ -80,3 +80,8 @@ The repository contains tests/test_core.py for memory, safety, and tool-registry
 - Printer-specific workflow for the Brother HL-L2400D
 - More narrowly scoped Windows controls
 - Session reconnect/extension handling for long-running assistant sessions
+
+
+## Gemini availability handling
+
+Text mode disables automatic function calling because text prompts do not need local tool execution. Transient Gemini HTTP failures such as 429/5xx are retried with exponential backoff before returning a friendly error. Voice mode keeps function calling enabled for the local tool router.
