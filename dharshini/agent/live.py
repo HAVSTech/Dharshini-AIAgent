@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import random
 
@@ -10,6 +11,7 @@ from dharshini.config import Settings
 from dharshini.memory import MemoryStore
 from dharshini.safety import SafetyManager
 from dharshini.tools.registry import TOOLS, declarations
+from dharshini.wake_word import WakeWordDetector
 
 TEXT_MODEL = "gemini-3.8-flash"
 MAX_TEXT_ATTEMPTS = 4
@@ -31,7 +33,6 @@ class DharshiniAgent:
         )
 
     async def text(self, prompt: str) -> str:
-        last_error = None
         for attempt in range(1, MAX_TEXT_ATTEMPTS + 1):
             try:
                 response = await self.client.aio.models.generate_content(
@@ -46,7 +47,6 @@ class DharshiniAgent:
                 )
                 return response.text or ""
             except Exception as exc:
-                last_error = exc
                 status = getattr(exc, "status_code", None)
                 if status not in RETRYABLE_STATUS or attempt == MAX_TEXT_ATTEMPTS:
                     break
@@ -57,6 +57,7 @@ class DharshiniAgent:
                     flush=True,
                 )
                 await asyncio.sleep(delay)
+
         return (
             "I couldn't reach Gemini right now. "
             "The service may be temporarily busy. Please try again in a moment."
@@ -76,52 +77,120 @@ class DharshiniAgent:
             tools=[types.Tool(function_declarations=declarations())],
         )
 
-        try:
-            async with self.client.aio.live.connect(
-                model=self.settings.live_model, config=cfg
-            ) as session:
+        wake = None
+        if self.settings.wake_word_enabled:
+            wake = WakeWordDetector(
+                self.settings.wake_model_path,
+                self.settings.wake_threshold,
+            )
+            if wake.available:
+                try:
+                    wake.start()
+                    print(
+                        f"[Dharshini] Wake word enabled: local model "
+                        f"{wake.model_path}",
+                        flush=True,
+                    )
+                except Exception as exc:
+                    print(
+                        f"[Dharshini] Wake word unavailable ({exc}); "
+                        "falling back to always-listening mode.",
+                        flush=True,
+                    )
+                    wake = None
+            else:
                 print(
-                    f"{self.settings.name} is listening. "
-                    "Speak naturally; press Ctrl+C to stop.",
+                    f"[Dharshini] Wake model not found at "
+                    f"{wake.model_path}; falling back to always-listening mode.",
                     flush=True,
                 )
+                wake = None
 
-                sender = asyncio.create_task(self._send_audio(session, mic))
+        try:
+            while True:
+                if wake is not None:
+                    triggered = await self._wait_for_wake(mic, wake)
+                    if not triggered:
+                        continue
+                    print(
+                        f"\n[{self.settings.name}] Wake word detected.",
+                        flush=True,
+                    )
+                    self._drain_microphone(mic)
+
                 try:
-                    # The SDK's receive() iterator represents one model interaction.
-                    # It can finish normally after a response even though the Live
-                    # WebSocket session is still open. Start another receive iterator
-                    # so the assistant remains available for the next user turn.
-                    while True:
-                        try:
-                            async for response in session.receive():
-                                await self._process_response(
-                                    session, response, speaker
-                                )
-                        except asyncio.CancelledError:
-                            raise
-                        except Exception as exc:
-                            print(
-                                f"\n[Dharshini] Live receive error: "
-                                f"{type(exc).__name__}: {exc}",
-                                flush=True,
-                            )
-                            raise
-                finally:
-                    sender.cancel()
-                    await asyncio.gather(sender, return_exceptions=True)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            print(
-                f"\n[Dharshini] Voice session stopped: "
-                f"{type(exc).__name__}: {exc}",
-                flush=True,
-            )
-            raise
+                    await self._voice_session(mic, speaker, cfg)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    print(
+                        f"\n[Dharshini] Voice session stopped: "
+                        f"{type(exc).__name__}: {exc}",
+                        flush=True,
+                    )
+                    if wake is None:
+                        raise
+                    print(
+                        "[Dharshini] Returning to wake-word standby.",
+                        flush=True,
+                    )
+        except KeyboardInterrupt:
+            print("\n[Dharshini] Stopped.", flush=True)
         finally:
             mic.stop()
             speaker.stop()
+
+    async def _voice_session(self, mic, speaker, cfg) -> None:
+        async with self.client.aio.live.connect(
+            model=self.settings.live_model,
+            config=cfg,
+        ) as session:
+            print(
+                f"{self.settings.name} is listening. "
+                "Speak naturally; press Ctrl+C to stop.",
+                flush=True,
+            )
+
+            sender = asyncio.create_task(self._send_audio(session, mic))
+            try:
+                while True:
+                    try:
+                        async for response in session.receive():
+                            await self._process_response(
+                                session, response, speaker
+                            )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        print(
+                            f"\n[Dharshini] Live receive error: "
+                            f"{type(exc).__name__}: {exc}",
+                            flush=True,
+                        )
+                        raise
+            finally:
+                sender.cancel()
+                await asyncio.gather(sender, return_exceptions=True)
+
+    async def _wait_for_wake(
+        self, mic: Microphone, wake: WakeWordDetector
+    ) -> bool:
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                chunk = await loop.run_in_executor(None, mic.read)
+            except Exception:
+                continue
+            if wake.feed(chunk):
+                return True
+
+    @staticmethod
+    def _drain_microphone(mic: Microphone) -> None:
+        while True:
+            try:
+                mic.queue.get_nowait()
+            except Exception:
+                return
 
     async def _process_response(self, session, response, speaker) -> None:
         if response.server_content:
