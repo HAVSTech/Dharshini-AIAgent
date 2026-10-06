@@ -8,6 +8,7 @@ from .printer import (
     list_printers,
     print_file,
     print_folder,
+    printer_capabilities,
     printer_status,
 )
 from .windows import open_app, open_folder, open_url, system_info, take_screenshot
@@ -47,6 +48,11 @@ TOOLS: dict[str, ToolSpec] = {
         "Report the Windows printer status and queued job count.",
         printer_status,
     ),
+    "printer_capabilities": ToolSpec(
+        "printer_capabilities",
+        "Report supported paper forms and duplex capability for a Windows printer.",
+        printer_capabilities,
+    ),
     "list_printers": ToolSpec(
         "list_printers",
         "List installed Windows printers.",
@@ -59,13 +65,13 @@ TOOLS: dict[str, ToolSpec] = {
     ),
     "print_file": ToolSpec(
         "print_file",
-        "Analyze and print one PDF, Word, or Excel file with the correct orientation and duplex mode.",
+        "Analyze and print one PDF, Word, or Excel file with automatic paper size, orientation, and duplex selection.",
         print_file,
         "CONFIRM",
     ),
     "print_folder": ToolSpec(
         "print_folder",
-        "Analyze and sequentially print supported PDF, Word, and Excel files from a folder.",
+        "Analyze and sequentially print supported PDF, Word, and Excel files with automatic paper size, orientation, and duplex selection.",
         print_folder,
         "CONFIRM",
     ),
@@ -84,12 +90,15 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "system_info": {},
     "take_screenshot": {
-        "path": {
-            "type": "STRING",
-            "description": "Optional output PNG path.",
-        }
+        "path": {"type": "STRING", "description": "Optional output PNG path."}
     },
     "printer_status": {
+        "printer_name": {
+            "type": "STRING",
+            "description": "Optional Windows printer name.",
+        }
+    },
+    "printer_capabilities": {
         "printer_name": {
             "type": "STRING",
             "description": "Optional Windows printer name.",
@@ -123,6 +132,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
+
 REQUIRED: dict[str, list[str]] = {
     "open_app": ["app"],
     "open_url": ["url"],
@@ -130,6 +140,7 @@ REQUIRED: dict[str, list[str]] = {
     "system_info": [],
     "take_screenshot": [],
     "printer_status": [],
+    "printer_capabilities": [],
     "list_printers": [],
     "default_printer": [],
     "print_file": ["path"],
