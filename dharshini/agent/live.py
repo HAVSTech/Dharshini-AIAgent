@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-from typing import Any
 from google import genai
 from google.genai import types
 from dharshini.audio import Microphone,Speaker,INPUT_RATE
@@ -32,7 +31,7 @@ class DharshiniAgent:
                 output_audio_transcription=types.AudioTranscriptionConfig(),
                 tools=[types.Tool(function_declarations=declarations())],
             )
-            async with self.client.aio.live.connect(model=self.settings.live_model,config=cfg) as session:
+            async with self.client.aio.live.connect(model="gemini-3.8-live",config=cfg) as session:
                 print(f"{self.settings.name} is listening. Ctrl+C to stop.")
                 sender=asyncio.create_task(self._send_audio(session,mic))
                 try:
@@ -46,8 +45,7 @@ class DharshiniAgent:
                                     if part.inline_data:speaker.play(part.inline_data.data)
                         if response.tool_call:
                             await self._handle_calls(session,response.tool_call.function_calls)
-                finally:
-                    sender.cancel()
+                finally: sender.cancel()
         finally:
             mic.stop();speaker.stop()
 
