@@ -558,10 +558,22 @@ def _sumatra_path() -> Path | None:
 def _print_pdf(analysis: PrintAnalysis, printer_name: str) -> None:
     sumatra = _sumatra_path()
     if sumatra is None:
+        configured = os.getenv("DHARSHINI_SUMATRA_PATH", "").strip()
         raise RuntimeError(
-            "SumatraPDF was not found. Install it manually and set "
-            "DHARSHINI_SUMATRA_PATH to SumatraPDF.exe."
+            "SumatraPDF was not found. Set DHARSHINI_SUMATRA_PATH in .env "
+            "to the full path of SumatraPDF.exe"
+            + (f" (configured value: {configured!r})." if configured else ".")
         )
+
+    pdf_path = Path(analysis.path).expanduser().resolve()
+    if not pdf_path.is_file():
+        raise FileNotFoundError(f"PDF does not exist or is not accessible: {pdf_path}")
+    try:
+        with pdf_path.open("rb") as stream:
+            if not stream.read(5).startswith(b"%PDF-"):
+                raise ValueError(f"File is not a valid PDF: {pdf_path}")
+    except OSError as exc:
+        raise OSError(f"Cannot read PDF '{pdf_path}': {exc}") from exc
 
     settings = "simplex"
     if analysis.duplex == "long-edge":
@@ -570,19 +582,42 @@ def _print_pdf(analysis: PrintAnalysis, printer_name: str) -> None:
         settings = "duplexshort"
 
     before = _snapshot_job_ids(printer_name)
-    subprocess.run(
-        [
-            str(sumatra),
-            "-silent",
-            "-print-to",
-            printer_name,
-            "-print-settings",
-            settings,
-            analysis.path,
-        ],
-        check=True,
-        timeout=120,
-    )
+    command = [
+        str(sumatra),
+        "-print-to",
+        printer_name,
+        "-print-settings",
+        settings,
+        "-silent",
+        str(pdf_path),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+            cwd=str(pdf_path.parent),
+        )
+    except OSError as exc:
+        raise RuntimeError(
+            f"Could not launch SumatraPDF at '{sumatra}': {exc}"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError(
+            f"SumatraPDF timed out while submitting '{pdf_path}' to '{printer_name}'. "
+            "Check the Windows print queue before retrying to avoid duplicate copies."
+        ) from exc
+
+    if completed.returncode != 0:
+        details = (completed.stderr or completed.stdout or "").strip()
+        raise RuntimeError(
+            f"SumatraPDF failed (exit code {completed.returncode}) while printing "
+            f"'{pdf_path}' to '{printer_name}'. "
+            f"Output: {details or 'SumatraPDF returned no diagnostic output.'}"
+        )
+
     _wait_for_spool(printer_name, before)
 
 
@@ -651,24 +686,21 @@ def print_file(path: str, printer_name: str | None = None) -> str:
     )
     _set_user_devmode(printer, dm)
 
-    last_error = None
-    for attempt in range(1, 4):
-        try:
-            _ensure_printer_ready(printer)
-            if analysis.extension == ".pdf":
-                _print_pdf(analysis, printer)
-            else:
-                _print_office(analysis, printer)
-            return f"Printed on {printer}: {analysis.summary}"
-        except Exception as exc:
-            last_error = exc
-            if attempt == 3:
-                break
-            time.sleep(2 * attempt)
+    # Do not automatically resubmit a print job after an uncertain failure:
+    # Windows may already have accepted it, and retrying could print duplicates.
+    _ensure_printer_ready(printer)
+    try:
+        if analysis.extension == ".pdf":
+            _print_pdf(analysis, printer)
+        else:
+            _print_office(analysis, printer)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Printing '{analysis.path}' to '{printer}' failed: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
 
-    raise RuntimeError(
-        f"Printing failed after 3 attempts for {Path(path).name}: {last_error}"
-    )
+    return f"Submitted to {printer}: {analysis.summary}"
 
 
 def print_folder(
