@@ -37,7 +37,7 @@ When the custom wake-word model is not installed, voice mode safely falls back t
 - Multi-page portrait PDFs use duplex long-edge binding
 - Multi-page landscape PDFs use duplex short-edge binding
 - Recursive folder printing that includes nested subfolders\n- Spoken file-type filters (for example, PDF only, Word only, or PDF + Word)\n- Sequential folder printing with queue/error checks
-- Limited retry handling for transient printer failures
+- Detailed PDF path and SumatraPDF error diagnostics\n- No automatic resubmission after uncertain print failures, to reduce duplicate-print risk
 - Printer discovery, default-printer reporting, capability and status checks
 
 ## Custom wake word
