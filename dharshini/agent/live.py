@@ -17,6 +17,27 @@ TEXT_MODEL = "gemini-3.8-flash"
 MAX_TEXT_ATTEMPTS = 4
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
+LIVE_RECONNECT_MAX_DELAY = 30.0
+
+
+def _is_transient_live_error(exc: Exception) -> bool:
+    """Identify common temporary Live API/WebSocket disconnects."""
+    status = getattr(exc, "status_code", None)
+    if status in {1006, 10054, 1011, 1012, 1013, 429, 500, 502, 503, 504}:
+        return True
+
+    text = f"{type(exc).__name__}: {exc}".lower()
+    markers = (
+        "abnormal closure",
+        "connectionreseterror",
+        "connection was forcibly closed",
+        "no close frame received",
+        "connectionclosederror",
+        "temporarily unavailable",
+        "timed out",
+    )
+    return any(marker in text for marker in markers)
+
 
 class DharshiniAgent:
     def __init__(self, settings: Settings, memory: MemoryStore, safety: SafetyManager):
@@ -106,6 +127,7 @@ class DharshiniAgent:
                 )
                 wake = None
 
+        reconnect_attempt = 0
         try:
             while True:
                 if wake is not None:
@@ -120,6 +142,7 @@ class DharshiniAgent:
 
                 try:
                     await self._voice_session(mic, speaker, cfg)
+                    reconnect_attempt = 0
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -128,12 +151,31 @@ class DharshiniAgent:
                         f"{type(exc).__name__}: {exc}",
                         flush=True,
                     )
-                    if wake is None:
-                        raise
+                    if not _is_transient_live_error(exc):
+                        if wake is None:
+                            raise
+                        print(
+                            "[Dharshini] Non-transient voice error; returning to wake-word standby.",
+                            flush=True,
+                        )
+                        continue
+
+                    reconnect_attempt += 1
+                    delay = min(
+                        LIVE_RECONNECT_MAX_DELAY,
+                        2.0 * (2 ** min(reconnect_attempt - 1, 4)),
+                    ) + random.uniform(0, 0.5)
                     print(
-                        "[Dharshini] Returning to wake-word standby.",
+                        f"[Dharshini] Temporary Live connection loss. "
+                        f"Reconnecting in {delay:.1f}s...",
                         flush=True,
                     )
+                    await asyncio.sleep(delay)
+                    if wake is not None:
+                        print(
+                            "[Dharshini] Waiting for the wake word before reconnecting.",
+                            flush=True,
+                        )
         except KeyboardInterrupt:
             print("\n[Dharshini] Stopped.", flush=True)
         finally:
