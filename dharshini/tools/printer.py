@@ -578,6 +578,7 @@ def _print_pdf(analysis: PrintAnalysis, printer_name: str) -> None:
 
     setting_parts = [
         "landscape" if analysis.orientation == "landscape" else "portrait",
+        "fit",
         "simplex" if analysis.duplex == "simplex" else (
             "duplexlong" if analysis.duplex == "long-edge" else "duplexshort"
         ),
