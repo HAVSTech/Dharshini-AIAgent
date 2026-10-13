@@ -35,7 +35,7 @@ When the custom wake-word model is not installed, voice mode safely falls back t
 - 1-page simplex printing
 - 2+ page portrait duplex with long-edge binding
 - 2+ page landscape duplex with short-edge binding
-- Sequential folder printing with queue/error checks
+- Recursive folder printing that includes nested subfolders\n- Spoken file-type filters (for example, PDF only, Word only, or PDF + Word)\n- Sequential folder printing with queue/error checks
 - Limited retry handling for transient printer failures
 - Printer discovery, default-printer reporting, capability and status checks
 
@@ -97,23 +97,23 @@ Print everything in H:\Projects\Local-agent\TestPrint
 
 the flow is:
 
-1. Find supported PDF, Word, and Excel files.
-2. Sort them by path/name.
-3. Analyze the current file independently.
-4. Determine rendered page count and dominant orientation.
-5. Detect the document's physical page size from the rendered page.
-6. Ask the Windows printer driver which paper forms it supports.
-7. Select the closest supported paper form.
-8. Select printing mode:
+1. Interpret the requested file types (for example, PDF + Word); if none are specified, use all supported types.\n2. Recursively find matching PDF, Word, and Excel files in the selected folder and its subfolders.
+3. Sort them by path/name.
+4. Analyze the current file independently.
+5. Determine rendered page count and dominant orientation.
+6. Detect the document's physical page size from the rendered page.
+7. Ask the Windows printer driver which paper forms it supports.
+8. Select the closest supported paper form.
+9. Select printing mode:
    - 1 page -> simplex
    - 2+ portrait pages -> duplex long-edge
    - 2+ landscape pages -> duplex short-edge
-9. Configure the printer's DEVMODE.
-10. Print only that file.
-11. Monitor the printer queue and driver status.
-12. Retry transient failures up to three attempts.
-13. Move to the next file.
-14. Report successes and failures.
+10. Configure the printer's DEVMODE.
+11. Print only that file.
+12. Monitor the printer queue and driver status.
+13. Retry transient failures up to three attempts.
+14. Move to the next file.
+15. Report successes and failures.
 
 Windows exposes printer paper IDs, names, and dimensions through DeviceCapabilities, while DEVMODE exposes paper size, orientation, and duplex settings. The implementation uses those local Windows APIs rather than hard-coding a single paper size. https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-devicecapabilitiesw
 
