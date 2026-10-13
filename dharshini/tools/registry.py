@@ -7,10 +7,10 @@ from .printer import (
     default_printer,
     list_printers,
     print_file,
-    print_folder,
     printer_capabilities,
     printer_status,
 )
+from .folder_printing import print_folder
 from .windows import open_app, open_folder, open_url, system_info, take_screenshot
 
 
@@ -71,7 +71,7 @@ TOOLS: dict[str, ToolSpec] = {
     ),
     "print_folder": ToolSpec(
         "print_folder",
-        "Analyze and sequentially print supported PDF, Word, and Excel files with automatic paper size, orientation, and duplex selection.",
+        "Recursively find and sequentially print matching PDF, Word, or Excel files inside a folder, including nested subfolders. Accepts file_types such as 'pdf and word'; defaults to all supported types.",
         print_folder,
         "CONFIRM",
     ),
@@ -119,7 +119,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     "print_folder": {
         "folder": {
             "type": "STRING",
-            "description": "Folder containing files to print.",
+            "description": "Existing folder path. All matching files in nested subfolders are included by default.",
         },
         "printer_name": {
             "type": "STRING",
@@ -128,6 +128,10 @@ SCHEMAS: dict[str, dict[str, Any]] = {
         "recursive": {
             "type": "BOOLEAN",
             "description": "Whether to include files in subfolders. Defaults to true.",
+        },
+        "file_types": {
+            "type": "STRING",
+            "description": "File types to print, for example 'pdf and word', 'excel', or 'all'. Word includes .doc and .docx. Defaults to all supported PDF, Word, and Excel files.",
         },
     },
 }
