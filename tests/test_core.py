@@ -2,7 +2,7 @@ from pathlib import Path
 
 from dharshini.memory import MemoryStore
 from dharshini.safety import SafetyManager
-from dharshini.tools.printer import STANDARD_PAPERS_MM, SUPPORTED_EXTENSIONS
+from dharshini.tools.printer import STANDARD_PAPERS_MM, SUPPORTED_EXTENSIONS, _duplex_mode
 from dharshini.tools.folder_printing import extensions_for_types
 from dharshini.tools.registry import TOOLS, declarations
 
@@ -57,6 +57,18 @@ def test_folder_print_rejects_unknown_file_type():
 
     with pytest.raises(ValueError, match="Unrecognized file type"):
         extensions_for_types("images")
+
+
+def test_excel_and_word_are_always_single_sided():
+    for extension in (".xls", ".xlsx", ".doc", ".docx"):
+        assert _duplex_mode(extension, 20, "portrait") == "simplex"
+        assert _duplex_mode(extension, 20, "landscape") == "simplex"
+
+
+def test_pdf_duplex_depends_on_page_count_and_orientation():
+    assert _duplex_mode(".pdf", 1, "portrait") == "simplex"
+    assert _duplex_mode(".pdf", 4, "portrait") == "long-edge"
+    assert _duplex_mode(".pdf", 4, "landscape") == "short-edge"
 
 
 def test_standard_paper_sizes():
