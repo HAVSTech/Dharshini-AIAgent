@@ -32,9 +32,10 @@ When the custom wake-word model is not installed, voice mode safely falls back t
 - Per-file page-count, orientation, and paper-size analysis
 - Printer paper capability discovery through the Windows driver
 - Automatic paper-size selection against supported printer forms
-- 1-page simplex printing
-- 2+ page portrait duplex with long-edge binding
-- 2+ page landscape duplex with short-edge binding
+- Word and Excel files always print single-sided (simplex)
+- PDFs with 1 page print single-sided
+- Multi-page portrait PDFs use duplex long-edge binding
+- Multi-page landscape PDFs use duplex short-edge binding
 - Recursive folder printing that includes nested subfolders\n- Spoken file-type filters (for example, PDF only, Word only, or PDF + Word)\n- Sequential folder printing with queue/error checks
 - Limited retry handling for transient printer failures
 - Printer discovery, default-printer reporting, capability and status checks
@@ -105,9 +106,10 @@ the flow is:
 7. Ask the Windows printer driver which paper forms it supports.
 8. Select the closest supported paper form.
 9. Select printing mode:
-   - 1 page -> simplex
-   - 2+ portrait pages -> duplex long-edge
-   - 2+ landscape pages -> duplex short-edge
+   - Word and Excel files -> always simplex (single-sided), regardless of page count or orientation
+   - 1-page PDF -> simplex
+   - 2+ portrait PDF pages -> duplex long-edge
+   - 2+ landscape PDF pages -> duplex short-edge
 10. Configure the printer's DEVMODE.
 11. Print only that file.
 12. Monitor the printer queue and driver status.
