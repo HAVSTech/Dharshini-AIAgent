@@ -2,7 +2,7 @@ from pathlib import Path
 
 from dharshini.memory import MemoryStore
 from dharshini.safety import SafetyManager
-from dharshini.tools.printer import STANDARD_PAPERS_MM, SUPPORTED_EXTENSIONS
+from dharshini.tools.printer import STANDARD_PAPERS_MM, SUPPORTED_EXTENSIONS\nfrom dharshini.tools.folder_printing import extensions_for_types
 from dharshini.tools.registry import TOOLS, declarations
 
 
@@ -42,6 +42,20 @@ def test_registry():
 
 def test_printer_file_types():
     assert {".pdf", ".doc", ".docx", ".xls", ".xlsx"} == SUPPORTED_EXTENSIONS
+
+
+def test_folder_print_file_type_filters():
+    assert extensions_for_types("PDFs and Word files") == {".pdf", ".doc", ".docx"}
+    assert extensions_for_types("excel") == {".xls", ".xlsx"}
+    assert extensions_for_types("all") == SUPPORTED_EXTENSIONS
+    assert extensions_for_types(None) == SUPPORTED_EXTENSIONS
+
+
+def test_folder_print_rejects_unknown_file_type():
+    import pytest
+
+    with pytest.raises(ValueError, match="Unrecognized file type"):
+        extensions_for_types("images")
 
 
 def test_standard_paper_sizes():
