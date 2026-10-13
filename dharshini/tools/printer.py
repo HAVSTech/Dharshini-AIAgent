@@ -393,20 +393,10 @@ def analyze_file(path: str, printer_name: str | None = None) -> PrintAnalysis:
 
         duplex = _duplex_mode(extension, len(sizes), orientation)
 
-        # PDF printing is delegated to SumatraPDF. Do not make it depend on
-        # Windows DeviceCapabilities, which can raise WinError 2 on otherwise
-        # usable printer installations. Office printing still needs the
-        # driver's paper-form data to configure its DEVMODE.
+        # Keep document page size from the PDF rendering. Avoid requiring
+        # DeviceCapabilities during analysis: some Windows printer drivers
+        # raise WinError 2 there even when normal manual printing works.
         selected_paper = None
-        if printer_name and extension != ".pdf":
-            try:
-                selected_paper = _select_supported_paper(printer_name, dominant)
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Could not read supported paper sizes from printer "
-                    f"'{printer_name}' while analyzing '{file_path}': "
-                    f"{type(exc).__name__}: {exc}"
-                ) from exc
 
         return PrintAnalysis(
             path=str(file_path),
@@ -595,8 +585,16 @@ def _print_pdf(analysis: PrintAnalysis, printer_name: str) -> None:
     # Sumatra applies these as per-job settings, avoiding a global printer
     # configuration change that may fail under normal Windows user permissions.
     paper_name = analysis.paper.strip()
-    if paper_name and paper_name.lower() != "custom" and "," not in paper_name:
-        setting_parts.append(f"paper={paper_name}")
+    standard_names = {
+        "a5": "A5",
+        "a4": "A4",
+        "a3": "A3",
+        "letter": "Letter",
+        "legal": "Legal",
+        "ledger": "Ledger",
+    }
+    if paper_name.lower() in standard_names:
+        setting_parts.append(f"paper={standard_names[paper_name.lower()]}")
     settings = ",".join(setting_parts)
 
     before = _snapshot_job_ids(printer_name)
@@ -691,26 +689,15 @@ def print_file(path: str, printer_name: str | None = None) -> str:
     _ensure_printer_ready(printer)
     analysis = analyze_file(path, printer)
 
-    # PDF jobs are sent directly to SumatraPDF; don't require a printer
-    # capability query before a PDF can be submitted. Office COM printing
-    # needs a paper form for its DEVMODE configuration.
-    paper = None
+    # Set orientation and simplex/duplex for Office jobs, but leave paper
+    # selection to the document's own page setup and the printer driver.
+    # This avoids a failing DeviceCapabilities lookup blocking all files.
     if analysis.extension != ".pdf":
-        try:
-            paper = _select_supported_paper(
-                printer,
-                analysis.paper_size_mm or (210, 297),
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                f"Could not select a supported paper size on '{printer}' "
-                f"for '{analysis.path}': {type(exc).__name__}: {exc}"
-            ) from exc
         dm = _get_modified_devmode(
             printer,
             analysis.orientation,
             analysis.duplex,
-            paper,
+            None,
         )
         _set_user_devmode(printer, dm)
 
