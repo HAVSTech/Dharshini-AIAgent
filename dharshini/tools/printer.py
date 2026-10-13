@@ -655,47 +655,27 @@ def _print_pdf(analysis: PrintAnalysis, printer_name: str) -> None:
 
 
 def _print_office(analysis: PrintAnalysis, printer_name: str) -> None:
-    import win32com.client  # type: ignore
+    """Render Word/Excel through Office to PDF, then print as a simplex PDF job.
 
-    path = Path(analysis.path)
-    before = _snapshot_job_ids(printer_name)
-
-    if analysis.extension in {".docx", ".doc"}:
-        app = win32com.client.DispatchEx("Word.Application")
-        document = None
-        try:
-            app.Visible = False
-            document = app.Documents.Open(
-                str(path), ReadOnly=True, AddToRecentFiles=False
-            )
-            document.PrintOut(
-                Background=False,
-                Copies=1,
-                ActivePrinter=printer_name,
-            )
-        finally:
-            if document is not None:
-                document.Close(False)
-            app.Quit()
-
-    elif analysis.extension in {".xlsx", ".xls"}:
-        app = win32com.client.DispatchEx("Excel.Application")
-        workbook = None
-        try:
-            app.Visible = False
-            app.DisplayAlerts = False
-            workbook = app.Workbooks.Open(
-                str(path), ReadOnly=True, UpdateLinks=False, AddToMru=False
-            )
-            workbook.PrintOut(Copies=1, ActivePrinter=printer_name)
-        finally:
-            if workbook is not None:
-                workbook.Close(False)
-            app.Quit()
-    else:
-        raise ValueError(f"Unsupported Office file: {analysis.extension}")
-
-    _wait_for_spool(printer_name, before)
+    Word's Document.PrintOut does not accept ActivePrinter as a keyword
+    argument. Rendering both Office formats to PDF also lets Sumatra apply
+    simplex per job without relying on Office-specific printer arguments.
+    """
+    office_pdf = _office_to_pdf(Path(analysis.path))
+    try:
+        pdf_analysis = PrintAnalysis(
+            path=str(office_pdf),
+            extension=analysis.extension,
+            pages=analysis.pages,
+            orientation=analysis.orientation,
+            duplex="simplex",
+            paper=analysis.paper,
+            paper_size_mm=analysis.paper_size_mm,
+            mixed_paper=analysis.mixed_paper,
+        )
+        _print_pdf(pdf_analysis, printer_name)
+    finally:
+        shutil.rmtree(office_pdf.parent, ignore_errors=True)
 
 
 def print_file(path: str, printer_name: str | None = None) -> str:
@@ -706,18 +686,9 @@ def print_file(path: str, printer_name: str | None = None) -> str:
     _ensure_printer_ready(printer)
     analysis = analyze_file(path, printer)
 
-    # Set orientation and simplex/duplex for Office jobs, but leave paper
-    # selection to the document's own page setup and the printer driver.
-    # This avoids a failing DeviceCapabilities lookup blocking all files.
-    if analysis.extension != ".pdf":
-        dm = _get_modified_devmode(
-            printer,
-            analysis.orientation,
-            analysis.duplex,
-            None,
-        )
-        _set_user_devmode(printer, dm)
-
+    # PDF and Office jobs use per-job settings through SumatraPDF. Office files
+    # are exported to PDF first so simplex is explicit and printer settings are
+    # not changed globally.
     # Do not automatically resubmit a print job after an uncertain failure:
     # Windows may already have accepted it, and retrying could print duplicates.
     _ensure_printer_ready(printer)
