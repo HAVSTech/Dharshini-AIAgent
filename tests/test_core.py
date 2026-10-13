@@ -2,7 +2,8 @@ from pathlib import Path
 
 from dharshini.memory import MemoryStore
 from dharshini.safety import SafetyManager
-from dharshini.tools.printer import STANDARD_PAPERS_MM, SUPPORTED_EXTENSIONS\nfrom dharshini.tools.folder_printing import extensions_for_types
+from dharshini.tools.printer import STANDARD_PAPERS_MM, SUPPORTED_EXTENSIONS
+from dharshini.tools.folder_printing import extensions_for_types
 from dharshini.tools.registry import TOOLS, declarations
 
 
