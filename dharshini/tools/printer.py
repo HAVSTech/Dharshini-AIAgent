@@ -87,8 +87,21 @@ def default_printer() -> str:
 def list_printers() -> list[str]:
     _require_win32()
     flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-    return [item[2] for item in win32print.EnumPrinters(flags, None, 2)]
-
+    # pywin32 may return printer records as dictionaries (keys such as
+    # 'pPrinterName') or tuples depending on API/version. Handle both shapes.
+    printers = win32print.EnumPrinters(flags, None, 2)
+    names: list[str] = []
+    for item in printers:
+        if isinstance(item, dict):
+            name = item.get("pPrinterName") or item.get("Name")
+        else:
+            try:
+                name = item[2]
+            except (IndexError, KeyError, TypeError):
+                name = None
+        if name:
+            names.append(str(name))
+    return names
 
 def _printer_info(printer_name: str) -> dict:
     handle = win32print.OpenPrinter(printer_name)
