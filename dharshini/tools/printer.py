@@ -575,11 +575,18 @@ def _print_pdf(analysis: PrintAnalysis, printer_name: str) -> None:
     except OSError as exc:
         raise OSError(f"Cannot read PDF '{pdf_path}': {exc}") from exc
 
-    settings = "simplex"
-    if analysis.duplex == "long-edge":
-        settings = "duplexlong"
-    elif analysis.duplex == "short-edge":
-        settings = "duplexshort"
+    setting_parts = [
+        "landscape" if analysis.orientation == "landscape" else "portrait",
+        "simplex" if analysis.duplex == "simplex" else (
+            "duplexlong" if analysis.duplex == "long-edge" else "duplexshort"
+        ),
+    ]
+    # Sumatra applies these as per-job settings, avoiding a global printer
+    # configuration change that may fail under normal Windows user permissions.
+    paper_name = analysis.paper.strip()
+    if paper_name and paper_name.lower() != "custom" and "," not in paper_name:
+        setting_parts.append(f"paper={paper_name}")
+    settings = ",".join(setting_parts)
 
     before = _snapshot_job_ids(printer_name)
     command = [
@@ -678,13 +685,16 @@ def print_file(path: str, printer_name: str | None = None) -> str:
         analysis.paper_size_mm or (210, 297),
     )
 
-    dm = _get_modified_devmode(
-        printer,
-        analysis.orientation,
-        analysis.duplex,
-        paper,
-    )
-    _set_user_devmode(printer, dm)
+    # PDF settings are passed directly to SumatraPDF per job. Office COM
+    # printing still uses the Windows printer DEVMODE as its configuration.
+    if analysis.extension != ".pdf":
+        dm = _get_modified_devmode(
+            printer,
+            analysis.orientation,
+            analysis.duplex,
+            paper,
+        )
+        _set_user_devmode(printer, dm)
 
     # Do not automatically resubmit a print job after an uncertain failure:
     # Windows may already have accepted it, and retrying could print duplicates.
