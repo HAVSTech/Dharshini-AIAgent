@@ -172,9 +172,52 @@ def _blocking_printer_flags(status: int) -> list[str]:
     )
 
 
+def _wait_for_paper_refill(printer_name: str) -> None:
+    """Wait for the user to refill paper and the printer to report ready."""
+    while True:
+        print(
+            f"[Dharshini printer] Paper is out or unavailable in '{printer_name}'. "
+            "Refill the paper tray, clear any printer-panel warning, then press Enter here.",
+            flush=True,
+        )
+        try:
+            input()
+        except (EOFError, KeyboardInterrupt) as exc:
+            raise RuntimeError(
+                "Paper-out recovery was cancelled; the existing print job was not resubmitted."
+            ) from exc
+
+        # Do not resubmit the document. Keep waiting for the printer/driver to
+        # clear the paper-out state so its existing spool job can continue.
+        while True:
+            info = _printer_info(printer_name)
+            flags = set(_status_flags(info.get("Status", 0)))
+            if "paper out" not in flags and "paper problem" not in flags:
+                other_blocking = sorted(
+                    _blocking_printer_flags(info.get("Status", 0))
+                    - {"paper out", "paper problem"}
+                )
+                if other_blocking:
+                    raise RuntimeError(
+                        f"Printer '{printer_name}' is not ready: {', '.join(other_blocking)}."
+                    )
+                print(
+                    f"[Dharshini printer] '{printer_name}' reports ready; continuing the existing print job.",
+                    flush=True,
+                )
+                return
+            time.sleep(2)
+
+
 def _ensure_printer_ready(printer_name: str) -> None:
     info = _printer_info(printer_name)
-    blocking = _blocking_printer_flags(info.get("Status", 0))
+    status = info.get("Status", 0)
+    flags = set(_status_flags(status))
+    if "paper out" in flags or "paper problem" in flags:
+        _wait_for_paper_refill(printer_name)
+        return
+
+    blocking = _blocking_printer_flags(status)
     if blocking:
         raise RuntimeError(
             f"Printer '{printer_name}' is not ready: {', '.join(blocking)}."
@@ -525,11 +568,18 @@ def _wait_for_spool(
     deadline = time.time() + timeout
     while time.time() < deadline:
         info = _printer_info(printer_name)
-        blocking = _blocking_printer_flags(info.get("Status", 0))
-        if blocking:
-            raise RuntimeError(
-                f"Printer error while processing job: {', '.join(blocking)}."
-            )
+        status = info.get("Status", 0)
+        flags = set(_status_flags(status))
+        if "paper out" in flags or "paper problem" in flags:
+            _wait_for_paper_refill(printer_name)
+            # Resume monitoring the same Windows spool job after the user
+            # refills paper. Never resubmit here, as Windows may retain it.
+        else:
+            blocking = _blocking_printer_flags(status)
+            if blocking:
+                raise RuntimeError(
+                    f"Printer error while processing job: {', '.join(blocking)}."
+                )
 
         handle = win32print.OpenPrinter(printer_name)
         try:
