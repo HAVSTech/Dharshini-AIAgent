@@ -355,6 +355,19 @@ def _select_supported_paper(
     return selected
 
 
+def _duplex_mode(extension: str, pages: int, orientation: str) -> str:
+    """Choose duplex policy by file type.
+
+    Office documents (Word and Excel) are always single-sided. PDFs use
+    simplex for one page, then orientation-aware duplex for multi-page files.
+    """
+    if extension in {".doc", ".docx", ".xls", ".xlsx"}:
+        return "simplex"
+    if pages <= 1:
+        return "simplex"
+    return "long-edge" if orientation == "portrait" else "short-edge"
+
+
 def analyze_file(path: str, printer_name: str | None = None) -> PrintAnalysis:
     _require_win32()
     file_path = Path(os.path.expandvars(os.path.expanduser(path))).resolve()
@@ -378,12 +391,7 @@ def analyze_file(path: str, printer_name: str | None = None) -> PrintAnalysis:
         paper_name = _nearest_standard_paper(dominant)
         mixed = len(set(sizes)) > 1
 
-        if len(sizes) == 1:
-            duplex = "simplex"
-        elif orientation == "portrait":
-            duplex = "long-edge"
-        else:
-            duplex = "short-edge"
+        duplex = _duplex_mode(extension, len(sizes), orientation)
 
         selected_paper = None
         if printer_name:
