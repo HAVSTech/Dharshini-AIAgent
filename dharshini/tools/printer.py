@@ -314,7 +314,7 @@ def _office_to_pdf(path: Path) -> Path:
             workbook = excel.Workbooks.Open(
                 str(path), ReadOnly=True, UpdateLinks=False, AddToMru=False
             )
-            workbook.ExportAsFixedFormat(0, str(pdf_path))
+            # Export only the first worksheet, not the entire workbook.\n            workbook.Worksheets(1).ExportAsFixedFormat(0, str(pdf_path))
         finally:
             if workbook is not None:
                 workbook.Close(False)
