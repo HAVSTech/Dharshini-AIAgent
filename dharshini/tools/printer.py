@@ -393,9 +393,20 @@ def analyze_file(path: str, printer_name: str | None = None) -> PrintAnalysis:
 
         duplex = _duplex_mode(extension, len(sizes), orientation)
 
+        # PDF printing is delegated to SumatraPDF. Do not make it depend on
+        # Windows DeviceCapabilities, which can raise WinError 2 on otherwise
+        # usable printer installations. Office printing still needs the
+        # driver's paper-form data to configure its DEVMODE.
         selected_paper = None
-        if printer_name:
-            selected_paper = _select_supported_paper(printer_name, dominant)
+        if printer_name and extension != ".pdf":
+            try:
+                selected_paper = _select_supported_paper(printer_name, dominant)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Could not read supported paper sizes from printer "
+                    f"'{printer_name}' while analyzing '{file_path}': "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
 
         return PrintAnalysis(
             path=str(file_path),
@@ -680,14 +691,21 @@ def print_file(path: str, printer_name: str | None = None) -> str:
     _ensure_printer_ready(printer)
     analysis = analyze_file(path, printer)
 
-    paper = _select_supported_paper(
-        printer,
-        analysis.paper_size_mm or (210, 297),
-    )
-
-    # PDF settings are passed directly to SumatraPDF per job. Office COM
-    # printing still uses the Windows printer DEVMODE as its configuration.
+    # PDF jobs are sent directly to SumatraPDF; don't require a printer
+    # capability query before a PDF can be submitted. Office COM printing
+    # needs a paper form for its DEVMODE configuration.
+    paper = None
     if analysis.extension != ".pdf":
+        try:
+            paper = _select_supported_paper(
+                printer,
+                analysis.paper_size_mm or (210, 297),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not select a supported paper size on '{printer}' "
+                f"for '{analysis.path}': {type(exc).__name__}: {exc}"
+            ) from exc
         dm = _get_modified_devmode(
             printer,
             analysis.orientation,
