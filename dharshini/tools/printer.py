@@ -576,8 +576,11 @@ def _print_pdf(analysis: PrintAnalysis, printer_name: str) -> None:
     except OSError as exc:
         raise OSError(f"Cannot read PDF '{pdf_path}': {exc}") from exc
 
+    # Let SumatraPDF infer the page orientation from the PDF itself.
+    # Explicitly forcing portrait/landscape can interact poorly with some
+    # printer drivers and cause the page to be rotated or scaled too small.
+    # "fit" scales the full page to the printable area; A4 is selected per job.
     setting_parts = [
-        "landscape" if analysis.orientation == "landscape" else "portrait",
         "fit",
         "simplex" if analysis.duplex == "simplex" else (
             "duplexlong" if analysis.duplex == "long-edge" else "duplexshort"
