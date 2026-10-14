@@ -29,7 +29,7 @@ jobs:
       - name: Build standalone Windows application
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --windowed --name "Dharshini Print Manager" --hidden-import win32timezone --collect-submodules win32com --collect-submodules dharshini.tools --paths . print_manager.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "Dharshini Print Manager" --hidden-import win32timezone --collect-submodules win32com --collect-submodules dharshini.tools --paths . print_manager.py
       - name: Install Inno Setup
         run: choco install innosetup --yes --no-progress
       - name: Build Windows installer
