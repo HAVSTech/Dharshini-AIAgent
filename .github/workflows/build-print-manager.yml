@@ -1,0 +1,51 @@
+name: Build Dharshini Print Manager for Windows
+
+on:
+  push:
+    paths:
+      - "print_manager.py"
+      - "dharshini/tools/printer.py"
+      - ".github/workflows/build-print-manager.yml"
+      - "installer.iss"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install packaging dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller pypdf pywin32
+      - name: Build standalone Windows application
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed --name "Dharshini Print Manager" --hidden-import win32timezone --collect-submodules win32com --collect-submodules dharshini.tools --paths . print_manager.py
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $iscc = "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe" }
+          if (!(Test-Path $iscc)) { throw "Inno Setup compiler was not found." }
+          & $iscc installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+      - name: Upload EXE and installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dharshini-Print-Manager-Windows
+          path: |
+            dist/Dharshini Print Manager.exe
+            installer-output/Dharshini-Print-Manager-Setup.exe
+          if-no-files-found: error
+          retention-days: 14
