@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+import json
 import os
 import queue
 import threading
@@ -28,6 +29,10 @@ class PrintManagerApp:
         self.busy = False
         self.cancel_requested = False
         self.files: list[Path] = []
+        local_app_data = Path(os.getenv("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
+        self.history_path = local_app_data / "Dharshini" / "PrintManager" / "job_state.json"
+        self.file_statuses: dict[str, str] = {}
+        self._load_job_state()
         self.type_vars = {name: tk.BooleanVar(value=True) for name in TYPE_EXTENSIONS}
         self.recursive_var = tk.BooleanVar(value=True)
         self.path_var = tk.StringVar()
@@ -99,9 +104,79 @@ class PrintManagerApp:
         self.progress.pack(side="left", fill="x", expand=True, padx=12)
         self.print_button = ttk.Button(bottom, text="Print All", command=self._start_print)
         self.print_button.pack(side="left")
+        self.resume_button = ttk.Button(bottom, text="Resume pending", command=self._start_print)
+        self.resume_button.pack(side="left", padx=(8, 0))
+        self.reset_button = ttk.Button(bottom, text="Reset selected", command=self._reset_selected)
+        self.reset_button.pack(side="left", padx=(8, 0))
         self.cancel_button = ttk.Button(bottom, text="Stop after current file", command=self._cancel, state="disabled")
         self.cancel_button.pack(side="left", padx=(8, 0))
         ttk.Label(outer, textvariable=self.status_var, wraplength=850).pack(anchor="w", pady=(10, 0))
+
+    def _load_job_state(self) -> None:
+        try:
+            if self.history_path.is_file():
+                data = json.loads(self.history_path.read_text(encoding="utf-8"))
+                statuses = data.get("statuses", {})
+                if isinstance(statuses, dict):
+                    self.file_statuses = {
+                        str(path): ("NEEDS VERIFICATION" if state == "IN PROGRESS" else str(state))
+                        for path, state in statuses.items()
+                    }
+        except (OSError, ValueError, TypeError):
+            self.file_statuses = {}
+
+    def _save_job_state(self) -> None:
+        try:
+            self.history_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.history_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"statuses": self.file_statuses}, indent=2), encoding="utf-8")
+            temporary.replace(self.history_path)
+        except OSError as exc:
+            self.status_var.set(f"Warning: could not save print history: {exc}")
+
+    def _set_file_status(self, path: Path, status: str) -> None:
+        self.file_statuses[str(path.resolve())] = status
+        self._save_job_state()
+
+    def _refresh_file_row(self, index: int, path: Path) -> None:
+        if index < 0 or index >= self.file_list.size():
+            return
+        state = self.file_statuses.get(str(path.resolve()), "PENDING")
+        root_path = Path(self.path_var.get().strip().strip('"'))
+        try:
+            display_path = str(path.relative_to(root_path))
+        except ValueError:
+            display_path = str(path)
+        self.file_list.delete(index)
+        self.file_list.insert(index, f"[{state}] {display_path}")
+        color = "#16733c" if state == "SUBMITTED - VERIFY OUTPUT" else (
+            "#b42318" if state == "NEEDS VERIFICATION" else (
+                "#996515" if state == "IN PROGRESS" else "#333333"
+            )
+        )
+        self.file_list.itemconfig(index, foreground=color)
+
+    def _reset_selected(self) -> None:
+        selection = self.file_list.curselection()
+        if not selection:
+            messagebox.showinfo(APP_TITLE, "Select a file first.")
+            return
+        index = selection[0]
+        if index >= len(self.files):
+            return
+        path = self.files[index]
+        current = self.file_statuses.get(str(path.resolve()), "PENDING")
+        if current not in {"NEEDS VERIFICATION", "SUBMITTED - VERIFY OUTPUT", "FAILED"}:
+            messagebox.showinfo(APP_TITLE, "Only a file requiring verification or retry can be reset.")
+            return
+        if not messagebox.askyesno(
+            APP_TITLE,
+            f"Check the physical pages and Windows print queue for:\\n{path.name}\\n\\nOnly choose Yes if you have confirmed it is safe to print this file again.",
+        ):
+            return
+        self._set_file_status(path, "PENDING")
+        self._refresh_file_row(index, path)
+        self.status_var.set(f"{path.name} reset to pending.")
 
     def _browse(self) -> None:
         folder = filedialog.askdirectory(title="Choose folder to print")
@@ -141,10 +216,15 @@ class PrintManagerApp:
             messagebox.showerror(APP_TITLE, f"Could not read folder:\n{exc}")
             return
         self.file_list.delete(0, tk.END)
-        for path in self.files:
-            self.file_list.insert(tk.END, str(path.relative_to(root)))
-        self.count_var.set(f"{len(self.files)} matching file(s)")
-        self.status_var.set("Preview ready." if self.files else "No matching files found.")
+        for index, path in enumerate(self.files):
+            self.file_list.insert(tk.END, "")
+            self._refresh_file_row(index, path)
+        pending = sum(
+            self.file_statuses.get(str(path.resolve()), "PENDING") == "PENDING"
+            for path in self.files
+        )
+        self.count_var.set(f"{len(self.files)} matching file(s); {pending} pending")
+        self.status_var.set("Preview ready. Submitted files are not automatically retried." if self.files else "No matching files found.")
 
     def _load_printers(self) -> None:
         try:
@@ -167,20 +247,32 @@ class PrintManagerApp:
         if self.busy:
             return
         self._preview()
-        if not self.files:
+        pending = [
+            path for path in self.files
+            if self.file_statuses.get(str(path.resolve()), "PENDING") == "PENDING"
+        ]
+        if not pending:
+            messagebox.showinfo(APP_TITLE, "There are no pending files. Use Reset selected only after checking the printer output and queue.")
             return
         printer_name = self.printer_var.get().strip()
         if not printer_name:
             messagebox.showerror(APP_TITLE, "Select an installed printer first.")
             return
-        if not messagebox.askyesno(APP_TITLE, f"Submit {len(self.files)} file(s) to {printer_name}?\n\nWord and Excel print single-sided. PDF duplex follows the existing rules. Check the printer queue before retrying any uncertain job."):
+        if not messagebox.askyesno(
+            APP_TITLE,
+            f"Submit {len(pending)} pending file(s) to {printer_name}?\\n\\n"
+            "Previously submitted or uncertain files will not be automatically retried. "
+            "If a file fails, the batch will pause so you can check the printer before resuming.",
+        ):
             return
         self.busy = True
         self.cancel_requested = False
         self.print_button.configure(state="disabled")
+        self.resume_button.configure(state="disabled")
+        self.reset_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
-        self.progress.configure(maximum=len(self.files), value=0)
-        threading.Thread(target=self._print_worker, args=(list(self.files), printer_name), daemon=True).start()
+        self.progress.configure(maximum=len(pending), value=0)
+        threading.Thread(target=self._print_worker, args=(pending, printer_name), daemon=True).start()
 
     def _paper_prompt(self) -> None:
         answer = threading.Event()
@@ -198,21 +290,26 @@ class PrintManagerApp:
         builtins.input = lambda prompt="": self._paper_prompt()
         successes = 0
         failures: list[str] = []
+        paused_on_error = False
         try:
             for index, path in enumerate(files, start=1):
                 if self.cancel_requested:
                     break
-                self.events.put(("status", index, len(files), f"Printing {path.name}…"))
+                self.events.put(("status", index, len(files), str(path), f"Printing {path.name}…"))
                 try:
                     result = printer_engine.print_file(str(path), printer_name)
                     successes += 1
-                    self.events.put(("file", index, "OK", f"{path.name} — {result}"))
+                    self.events.put(("file", index, len(files), str(path), "SUBMITTED - VERIFY OUTPUT", f"{path.name} — submitted; verify the physical output"))
                 except Exception as exc:
+                    # The spooler may have accepted some or all of this file.
+                    # Never retry it automatically and pause the batch at once.
                     failures.append(f"{path.name}: {exc}")
-                    self.events.put(("file", index, "FAILED", f"{path.name} — {exc}"))
+                    self.events.put(("file", index, len(files), str(path), "NEEDS VERIFICATION", f"{path.name} — status uncertain; check printer output and queue: {exc}"))
+                    paused_on_error = True
+                    break
         finally:
             builtins.input = original_input
-            self.events.put(("done", successes, len(files), failures, self.cancel_requested))
+            self.events.put(("done", successes, len(files), failures, self.cancel_requested, paused_on_error))
 
     def _cancel(self) -> None:
         if self.busy:
@@ -225,37 +322,52 @@ class PrintManagerApp:
             while True:
                 event = self.events.get_nowait()
                 if event[0] == "status":
-                    _, index, total, message = event
+                    _, index, total, path_text, message = event
+                    path = Path(path_text)
+                    self._set_file_status(path, "IN PROGRESS")
+                    row = next((i for i, item in enumerate(self.files) if str(item.resolve()) == str(path.resolve())), -1)
+                    self._refresh_file_row(row, path)
                     self.progress.configure(maximum=total, value=index - 1)
                     self.status_var.set(f"{index}/{total}: {message}")
                 elif event[0] == "file":
-                    _, index, state, message = event
-                    self.file_list.selection_clear(0, tk.END)
-                    if index - 1 < self.file_list.size():
-                        self.file_list.selection_set(index - 1)
-                        self.file_list.see(index - 1)
-                    self.file_list.itemconfig(index - 1, foreground="#16733c" if state == "OK" else "#b42318")
+                    _, index, total, path_text, state, message = event
+                    path = Path(path_text)
+                    self._set_file_status(path, state)
+                    row = next((i for i, item in enumerate(self.files) if str(item.resolve()) == str(path.resolve())), -1)
+                    self._refresh_file_row(row, path)
+                    if row >= 0:
+                        self.file_list.selection_clear(0, tk.END)
+                        self.file_list.selection_set(row)
+                        self.file_list.see(row)
+                    self.progress.configure(maximum=total, value=index)
                     self.status_var.set(message)
                 elif event[0] == "done":
-                    _, successes, total, failures, cancelled = event
+                    _, successes, total, failures, cancelled, paused_on_error = event
                     self.busy = False
                     self.print_button.configure(state="normal")
+                    self.resume_button.configure(state="normal")
+                    self.reset_button.configure(state="normal")
                     self.cancel_button.configure(state="disabled")
-                    if not cancelled:
-                        self.progress.configure(value=total)
-                    summary = f"Finished: {successes}/{total} file(s) submitted."
+                    summary = f"Submitted {successes}/{total} file(s) in this batch."
                     if cancelled:
-                        summary += " Stopped after current file."
+                        summary += " Stopped after the current file; remaining files are pending."
                     if failures:
-                        summary += f" {len(failures)} file(s) failed."
+                        summary += " Batch paused after an error. The uncertain file was not retried; check the physical output and Windows print queue."
+                    elif paused_on_error:
+                        summary += " Batch paused for printer recovery."
+                    if not failures and not cancelled:
+                        self.progress.configure(value=total)
                     self.status_var.set(summary)
                     if failures:
-                        messagebox.showwarning(APP_TITLE, summary + "\n\n" + "\n".join(failures[:10]))
+                        messagebox.showwarning(APP_TITLE, summary + "\\n\\n" + "\\n".join(failures[:10]))
                     else:
                         messagebox.showinfo(APP_TITLE, summary)
         except queue.Empty:
             pass
         self.root.after(100, self._process_events)
+
+
+
 
 
 def main() -> None:
