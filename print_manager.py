@@ -122,10 +122,16 @@ class PrintManagerApp:
         raw_path = os.path.expandvars(os.path.expanduser(self.path_var.get().strip().strip('"')))
         root = Path(raw_path)
         if not root.is_dir():
+            self.files = []
+            self.file_list.delete(0, tk.END)
+            self.count_var.set("0 matching file(s)")
             messagebox.showerror(APP_TITLE, "Please enter a valid folder path or use Browse.")
             return
         extensions = self._selected_extensions()
         if not extensions:
+            self.files = []
+            self.file_list.delete(0, tk.END)
+            self.count_var.set("0 matching file(s)")
             messagebox.showwarning(APP_TITLE, "Select at least one file type.")
             return
         try:
