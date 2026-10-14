@@ -171,7 +171,7 @@ class PrintManagerApp:
             return
         if not messagebox.askyesno(
             APP_TITLE,
-            f"Check the physical pages and Windows print queue for:\\n{path.name}\\n\\nOnly choose Yes if you have confirmed it is safe to print this file again.",
+            f"Check the physical pages and Windows print queue for:\n{path.name}\n\nOnly choose Yes if you have confirmed it is safe to print this file again.",
         ):
             return
         self._set_file_status(path, "PENDING")
@@ -260,7 +260,7 @@ class PrintManagerApp:
             return
         if not messagebox.askyesno(
             APP_TITLE,
-            f"Submit {len(pending)} pending file(s) to {printer_name}?\\n\\n"
+            f"Submit {len(pending)} pending file(s) to {printer_name}?\n\n"
             "Previously submitted or uncertain files will not be automatically retried. "
             "If a file fails, the batch will pause so you can check the printer before resuming.",
         ):
@@ -359,7 +359,7 @@ class PrintManagerApp:
                         self.progress.configure(value=total)
                     self.status_var.set(summary)
                     if failures:
-                        messagebox.showwarning(APP_TITLE, summary + "\\n\\n" + "\\n".join(failures[:10]))
+                        messagebox.showwarning(APP_TITLE, summary + "\n\n" + "\n".join(failures[:10]))
                     else:
                         messagebox.showinfo(APP_TITLE, summary)
         except queue.Empty:
